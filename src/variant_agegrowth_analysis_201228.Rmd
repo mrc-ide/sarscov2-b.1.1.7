@@ -1,0 +1,346 @@
+---
+title: "Analysis: Share of age groups between VOC and non-VOC variants"
+output: 
+  bookdown::html_document2:
+    toc: TRUE
+    toc_float: TRUE
+    highlight: tango
+---
+
+<style type="text/css">
+h1{
+  font-size: 24pt;
+}
+h2{
+  font-size: 18pt;
+}
+body{
+  font-size: 12pt;
+}
+</style>
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+include_solutions <- TRUE
+```
+```{r, include=FALSE, eval=FALSE, echo=FALSE, warning=FALSE, message=FALSE, tidy=TRUE}
+require(rmarkdown)
+#setwd( DIRECTORY ) 
+#rmarkdown::render('variant_agegrowth_analysis_201222.Rmd')
+```
+
+
+```{r, include=TRUE, eval=TRUE, message=FALSE, echo=TRUE, warning=FALSE, tidy=TRUE}
+require(knitr)
+require(kableExtra)
+require(data.table) # data mangling
+require(here)
+require(ggplot2)
+wdir <- here()
+```
+
+# Head analysis 201228 00:19
+
+
+## Data processing
+```{r, include=TRUE, eval=TRUE, echo=TRUE, fig.align='center', out.width='80%'}
+# load age population counts
+dp <- as.data.table(read.csv(file=file.path(wdir,'data','ukmidyearestimates20192020ladcodes.csv'), stringsAsFactors = FALSE))
+dp <- subset(dp, select=-All.ages)
+setnames(dp, 4:94, paste0('age-',0:90))
+setnames(dp, 'Geography1', 'Geography')
+dp <- melt(dp, id.vars=c('Code','Name','Geography'), variable.name = 'age', value.name = 'pop_count')
+set(dp, NULL, 'age', dp[,as.integer(gsub('age-','',age))])
+set(dp, NULL, 'pop_count', dp[,as.integer(gsub(',','',pop_count))])
+
+# make age bands
+tmp <- data.table(age_from= seq(0L,70L,10L))
+tmp[, age_to:= age_from + 9L]
+tmp <- tmp[, list(age=seq.int(age_from, age_to)), by=c('age_from','age_to')]
+tmp[, age_band:= paste0(age_from,'-',age_to)]
+dp <- merge(dp, tmp, by='age')
+dp <- dp[, list(pop_count=sum(pop_count)), by=c('Code','Name','Geography','age_from','age_to','age_band')]
+
+# aggregate to STP areas
+tmp <- as.data.table(read.csv(file.path(wdir,'data','ltla-nhser-stp.csv')))
+setnames(tmp, 'ltla_code', 'LTLA_code')
+setnames(tmp, 'ltla_name', 'LTLA_name')
+setnames(tmp, 'stp_code', 'STP_code')
+setnames(tmp, 'stp_name', 'STP_name')
+tmp <- unique(subset(tmp, select=c(LTLA_code, LTLA_name, STP_code, STP_name )))
+tmp$LTLA_code %in% dp$Code #  cannot map all LTLAs to pop count data.table
+setnames(tmp, 'LTLA_code', 'Code')
+tmp <- subset(tmp, select = c(Code, STP_code, STP_name))
+dp2 <- merge(tmp, dp, by='Code')
+dp2 <- dp2[, list(pop_count=sum(pop_count)), by=c('STP_code','STP_name','age_from','age_to','age_band')]
+
+# make population fractions
+tmp <- dp2[, list(pop_total=sum(pop_count)), by='STP_code']
+dp2 <- merge(dp2, tmp, by='STP_code')
+dp2[, pop_prop := pop_count / pop_total]
+set(dp2, NULL, 'STP_name', dp2[, as.character(STP_name)])
+
+# make reference population
+dpref <- subset(dp, Name=='UNITED KINGDOM')
+tmp <- dpref[, list(pop_total=sum(pop_count)), by='Code']
+dpref <- merge(dpref, tmp, by='Code')
+dpref[, pop_prop := pop_count / pop_total]
+setnames(dpref, c('pop_count', 'pop_total', 'pop_prop'), c('popref_count', 'popref_total', 'popref_prop'))
+
+# load data
+dv <- as.data.table(read.csv(file=file.path(wdir,'data','S-cases-age-stp-week-nhser-labeled-1446-PHE.csv'), stringsAsFactors = FALSE))
+stopifnot(all( unique(dv$area) %in% unique(dp2$STP_name) ))
+# merge pop counts
+setnames(dp2, 'STP_name', 'area')
+dv <- merge(dv, dp2, by=c('area','age_band'))
+
+#
+setnames(dv, 
+  c('area','nhser_name'),
+  c('STP_name','NHSER_name')
+  )
+stopifnot( !nrow(subset(dv, is.na(S_positive) & !is.na(S_negative))) )
+stopifnot( !nrow(subset(dv, !is.na(S_positive) & is.na(S_negative))) )
+stopifnot( !nrow(subset(dv, is.na(S_positive) & is.na(S_negative))) )
+stopifnot( dv[, !any(grepl(' \\(STP\\)',STP_name))] )
+stopifnot( dv[, !any(grepl(' STP',STP_name))] )
+stopifnot( dv[, !any(grepl('&',STP_name))] )
+stopifnot( dv[, !any(grepl('Cornwall and the Isles of Scilly Health and Social Care Partnership',STP_name))] )
+stopifnot( dv[, !any(grepl('West Yorkshire and Harrogate Health and Care Partnership',STP_name))] )
+stopifnot( dv[, !any(grepl('Sussex Health and Care Partnership',STP_name))] )
+stopifnot( dv[, !any(grepl('Surrey Heartlands Health and Care Partnership',STP_name))] )
+stopifnot( dv[, !any(grepl('Frimley Health and Care',STP_name))] )
+stopifnot( dv[, !any(is.na(S_positive))] )
+stopifnot( dv[, !any(is.na(S_negative))] )
+
+# expected 2688 entries, note missing combinations:
+tmp <- as.data.table(
+  expand.grid(
+    STP_name = unique(dv$STP_name),
+    epiweek = unique(dv$epiweek),
+    age_band = unique(dv$age_band)
+  ))
+dv <- merge(tmp, dv, by=c('epiweek','STP_name','age_band'), all=TRUE)
+subset(dv, is.na(total))
+
+dv <- subset(dv, !is.na(total))
+
+# make age bands as factor
+set(dv, NULL, 'age_band', NULL)
+tmp <- unique(subset(dv, select=c(age_from, age_to)))
+setkey(tmp, age_from)
+tmp[, age_band := factor(age_from, levels=age_from, labels=paste0(age_from,'-',age_to))]
+dv <- merge(dv, tmp, by=c('age_from','age_to'))
+
+# sense check keys
+stopifnot( nrow(dv) == nrow(unique(subset(dv, select=c(epiweek, STP_name, age_band)))) )
+```
+
+
+
+## Case-control bootstrap analysis on age composition of cases
+
+
+Let us denote the number of new infections with strain $s$ in age group $a$ in area $i$ in week $w$ by $I_{iswa}$, and the number of individuals in age group $a$ in area $i$ by $N_{ia}$. Then we define the infection rate of strain $s$ in age group $a$ in area $i$ in week $w$ through 
+$$
+I_{iswa} = \lambda_{iswa} N_{ia},
+$$
+For the case-control analysis, we decompose this expression into
+\begin{align}
+I_{iswa} & = \lambda_{iswa} N_{ia} \\
+& = \lambda_{isw} \frac{\lambda_{iswa}}{\lambda_{isw}} p_{ia} N_{i}\\
+& = \lambda_{isw} \pi_{iswa} p_{ia} N_{i},
+\end{align}
+where $N_i$ is the total population in area $i$, $p_{ia}$ is the proportion of the population in area $i$ that is in age group $a$, and $\lambda_{isw}$ is the overall infection rate of strain $s$ in area $i$ in week $w$.
+
+To control for behavioral, time and other effects in week $w$ in area $i$, we replace $\lambda_{isw}$ with $\tilde{\lambda}_{iw}=min(\lambda_{i0w},\lambda_{i1w})$, so that the case-control infection rate is
+$$
+\tilde{\lambda}_{iswa} = \tilde{\lambda}_{iw} \pi_{iswa}.
+$$
+
+
+Second to control for differences in the age composition of the population in area $i$, we age-standardise the population and then apply the case-control infection rate. This gives the case-control number of new infections with strain $s$ in age group $a$ in area $i$ in week $w$,
+$$
+\tilde{I}_{iswa} = \tilde{\lambda}_{iswa} \: p^{\text{ref}}_{a} \: N_{i}.
+$$
+The share of age group analysis below is based on a boostrap analysis of the age-standardised case-control number of infections $\tilde{I}_{iswa}$.
+
+```{r, include=TRUE, eval=TRUE, echo=TRUE}
+# select epi weeks
+dva <- subset(dv, 
+  epiweek>45 & epiweek<52, 
+  select=c(epiweek, age_band, age_from, age_to, STP_code, NHSER_name, S_positive, S_negative, total, pop_count, pop_total, pop_prop))
+
+# get quantities to predict S+, S- among total
+dva <- dva[,
+  list(
+    p_pos_hat = S_positive / (S_positive + S_negative),
+    p_neg_hat = S_negative / (S_positive + S_negative),
+    #total = total,
+    total = S_positive + S_negative,
+    pop_count = pop_count, 
+    pop_total = pop_total,  
+    pop_prop = pop_prop
+  ), 
+  by=c('epiweek','age_band','age_from','age_to','STP_code','NHSER_name')]
+
+# setup bootstrap case-control sampling from Multinomial-Dirichlet model
+set.seed(42L)
+bs.n <- 1e3
+bs <- unique(subset(dva, select=c(STP_code, epiweek)))
+bs[, STP_WK_ID := seq_len(nrow(bs))]
+tmp <- data.table( 
+  STP_WK_ID = sample(bs[, STP_WK_ID], size=nrow(bs)*bs.n, replace=TRUE), 
+  BS_STP_WK_ID=rep(1:nrow(bs), bs.n),
+  BS_ID = rep(1:bs.n, each=nrow(bs))
+  )
+tmp <- rbind( data.table(STP_WK_ID=1:nrow(bs), BS_STP_WK_ID=1:nrow(bs), BS_ID=0), tmp )
+bs <- merge(tmp, bs, by='STP_WK_ID')
+setkey(bs, BS_ID)
+
+dva_bs <- vector('list', bs.n+1)
+for(bs_id in 0:bs.n)
+{
+  # 
+  #bs_id <- 1
+  tmp <- subset(bs, BS_ID==bs_id)
+  tmp <- merge(tmp, dva, by=c('STP_code','epiweek'))
+  
+  # draw S+ and S- among total
+  #if(bs_id==0) 
+  if(TRUE)
+  {
+    tmp[, S_positive:= total * p_pos_hat]
+    tmp[, S_negative:= total - S_positive]
+  }
+  #if(bs_id>0) # use code below only when TOTAL is PHE total
+  if(FALSE)
+  {
+    tmp[, S_positive:= rbinom(length(p_pos_hat), total, p_pos_hat)]
+    tmp[, S_negative:= total - S_positive]
+  }
+  
+  # transform counts to force of infection acting on age population
+  tmp <- melt(tmp, 
+    id.vars = c('BS_STP_WK_ID','epiweek','age_band','age_from','age_to','STP_code','NHSER_name','pop_count','pop_total','pop_prop'), 
+    measure.vars = c('S_positive','S_negative'))
+  tmp[, foi:= value/pop_count]
+  
+  # calculate age share of foi
+  tmp2 <- tmp[, 
+    list( 
+      age_from=age_from,
+      foi_age=foi/sum(foi)
+      ), by=c('BS_STP_WK_ID','variable')]
+  tmp <- merge(tmp, tmp2, by=c('BS_STP_WK_ID','variable','age_from'))
+  
+  # define case-control minimum total foi
+  tmp2 <- tmp[, list( foi_total=sum(foi)), by=c('BS_STP_WK_ID','variable')]
+  tmp2 <- dcast.data.table(tmp2, BS_STP_WK_ID~variable, value.var = 'foi_total')
+  tmp2[, min_foi_total := pmin(S_positive, S_negative)]
+  set(tmp2, NULL, c('S_positive','S_negative'), NULL)
+  tmp2 <- subset(tmp2, min_foi_total>0)
+  tmp <- merge(tmp, tmp2, by=c('BS_STP_WK_ID'))
+  
+  # merge reference population frequencies for each age band
+  tmp <- merge(tmp, subset(dpref, select=c(age_from, age_to, popref_prop)), by=c('age_from','age_to'))
+  
+  # make case-control number of cases
+  tmp[, cases := pop_total*popref_prop*min_foi_total*foi_age]
+  
+  # draw cases assuming iid sampling of individuals
+  if(bs_id==0)
+  {
+    tmp[, cases := pop_total*popref_prop*min_foi_total*foi_age]
+  }
+  if(bs_id>0)
+  {
+    tmp[, cases := rpois(nrow(tmp), pop_total*popref_prop*min_foi_total*foi_age)]
+  }
+  tmp <- dcast.data.table(tmp, BS_STP_WK_ID+NHSER_name+STP_code+epiweek+age_from+age_to+age_band~variable, value.var='cases')
+  tmp[, BS_ID := bs_id]
+  dva_bs[[bs_id+1L]] <- copy(tmp)
+}
+dva_bs <- do.call('rbind',dva_bs)
+saveRDS(dva_bs, file=file.path(wdir, 'age', 'variant_age_bootstrap_samples_201227.rds'))
+```
+
+```{r, include=TRUE, eval=TRUE, echo=TRUE, fig.align='center', out.width='80%'}
+dva_bs <- readRDS(file=file.path(wdir, 'age', 'variant_age_bootstrap_samples_201227.rds'))
+
+# share of age groups among reported cases: make boostrap calculations
+bss <- dva_bs[, 
+  list(
+    S_positive = sum(S_positive),
+    S_negative = sum(S_negative)
+  ), 
+  by=c('BS_ID','age_band')]
+bss <- melt(bss, id.vars= c('BS_ID','age_band'), measure.vars= c('S_positive','S_negative'))
+tmp <- bss[, list(total = sum(value)), by=c('BS_ID','variable')]
+bss <- merge(bss, tmp, by=c('BS_ID','variable'))
+bss[, frequ:=value/total]
+tmp <- bss[BS_ID>0, 
+  list(
+    value=quantile(frequ, probs=c(0.5, 0.025, 0.975)),
+    stat=c('BS_M','BS_CL','BS_CU')
+    ), by=c('variable','age_band')]
+tmp <- dcast.data.table(tmp, variable+age_band~stat, value.var = 'value')
+bss <- merge( subset(bss, BS_ID==0, select=c(variable, age_band, frequ)), tmp, by=c('variable', 'age_band') )
+
+# share of age groups among reported cases: plot
+set(bss, NULL, 'variable', bss[, gsub('S_positive','S+',variable)])
+set(bss, NULL, 'variable', bss[, gsub('S_negative','S-',variable)])
+p <- ggplot(bss, aes(x=age_band, fill=variable)) +
+  geom_bar(aes(y=frequ), position=position_dodge(width = 0.9), stat='identity', width=0.95) +
+  scale_fill_manual(values=c('S+'="#51c7b7", 'S-'="#f99d38")) +
+  geom_errorbar(aes(ymin=BS_CL, ymax=BS_CU), position=position_dodge(width = 0.9), width=0.3) +
+  scale_y_continuous(labels=scales::percent, expand=c(0,0), lim=c(0,0.22)) +
+  labs(x='age distribution of cases', fill='', y='') +
+  theme_bw() +
+  theme(
+    legend.position = 'right',
+    axis.text.x = element_text(angle = 60, vjust = 1, hjust=1)
+  )
+ggsave(file=file.path(wdir, 'age', 'variant_agedistribution2_casecontrol_by_STPweeks_201227.png'), p, w=3.5, h=4.5)
+ggsave(file=file.path(wdir, 'age', 'variant_agedistribution2_casecontrol_by_STPweeks_201227.pdf'), p, w=3.5, h=4, useDingbats=FALSE)
+knitr::include_graphics(file.path(wdir,'age', 'variant_agedistribution2_casecontrol_by_STPweeks_201227.png'))
+
+# share of age groups among reported cases: csv
+bss[, LABEL:= paste0(round(frequ, d=3), ' [', round(BS_CL, d=3), ', ', round(BS_CU, d=3), ']')]
+tmp <- dcast.data.table(bss, age_band~variable, value.var = 'LABEL')
+write.csv(tmp, file=file.path(wdir,'age', 'variant_agedistribution2_casecontrol_by_STPweeks_201227.csv'), row.names = FALSE)
+
+# ratio of age shares: make boostrap calculations : calculations
+bss <- dva_bs[, list( ratio_Sneg_Spos = sum(S_negative) / sum(S_positive) ), by=c('BS_ID','age_band')]
+tmp <- bss[BS_ID>0, 
+  list(
+    value=quantile(ratio_Sneg_Spos, probs=c(0.5, 0.025, 0.975)),
+    stat=c('BS_M','BS_CL','BS_CU')
+    ), by=c('age_band')]
+tmp <- dcast.data.table(tmp, age_band~stat, value.var = 'value')
+bss <- merge( subset(bss, BS_ID==0, select=c(age_band, ratio_Sneg_Spos)), tmp, by=c('age_band') )
+
+# ratio of age shares: make boostrap calculations : plot
+p <- ggplot(bss, aes(x=age_band)) +
+  geom_hline( yintercept = 1, colour='grey50') +
+  geom_point(aes(y=ratio_Sneg_Spos)) +
+  geom_errorbar(aes(ymin=BS_CL, ymax=BS_CU)) +
+  scale_y_log10(breaks=c(0.8, 1,  1/.8)) +
+  coord_cartesian(ylim=c(0.65, 1/0.65)) +
+  labs(x='age distribution of cases', fill='', y='ratio of age share S- / age share S+') +
+  theme_bw() +
+  theme(
+    legend.position = 'bottom',
+    axis.text.x = element_text(angle = 60, vjust = 1, hjust=1)
+  )
+ggsave(file=file.path(wdir, 'age', 'variant_agedistributionratio2_casecontrol_by_STPweeks_201227.png'), p, w=3.5, h=4.5)
+ggsave(file=file.path(wdir, 'age', 'variant_agedistributionratio2_casecontrol_by_STPweeks_201227.pdf'), p, w=3.5, h=4, useDingbats=FALSE)
+knitr::include_graphics(file.path(wdir,'age', 'variant_agedistributionratio2_casecontrol_by_STPweeks_201227.png'))
+
+# ratio of age shares: make boostrap calculations : csv
+bss[, LABEL:= paste0(round(ratio_Sneg_Spos, d=3), ' [', round(BS_CL, d=3), ', ', round(BS_CU, d=3), ']')]
+tmp <- subset(bss, select=c(age_band, LABEL))
+write.csv(tmp, file=file.path(wdir,'age', 'variant_agedistributionratio2_casecontrol_by_STPweeks_201227.csv'), row.names = FALSE)
