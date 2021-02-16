@@ -101,7 +101,7 @@ df$abbrev = gsub("South West","SW",df$abbrev)
 n501y.order = df[epiweek == 56,]
 n501y.order  = n501y.order$abbrev[order(n501y.order$n501y,decreasing=TRUE)] # order from lowest n501y % to highest
 
-df$abbrev_sorted = factor(abbrev,levels=n501y.order)
+df$abbrev_sorted = factor(df$abbrev,levels=n501y.order)
 
 a <- ggplot(df[epiweek>=45 & epiweek <= 56,], aes(y=total, x=epiweek)) + 
   geom_vline(xintercept = lockdown_start,col="darkred") +
