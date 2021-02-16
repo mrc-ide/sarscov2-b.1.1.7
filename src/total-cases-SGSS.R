@@ -124,11 +124,11 @@ a <- ggplot(df[epiweek>=45 & epiweek <= 56,], aes(y=total, x=epiweek)) +
         legend.box.margin=margin(-10,-10,-10,-10)) +
   geom_line(aes(y=neg),colour="#f99d38",lwd=1) +
   geom_line(aes(y=pos),colour="#51c7b7",lwd=1) +
-  geom_text(data=df[area %in% n501y.order[STPs] & epiweek == 56], aes(x=epiweek, y=neg),label="S-",colour="#f99d38",
+  geom_text(data=df[epiweek == 56], aes(x=epiweek, y=neg),label="S-",colour="#f99d38",
             hjust=0,nudge_x=.15) +
-  geom_text(data=df[area %in% n501y.order[STPs] & epiweek == 56], aes(x=epiweek, y=total),label="total",colour="#555555",
+  geom_text(data=df[epiweek == 56], aes(x=epiweek, y=total),label="total",colour="#555555",
             hjust=0,nudge_x=.15) +
-  geom_text(data=df[area %in% n501y.order[STPs] & epiweek == 56], aes(x=epiweek, y=pos),label="S+",colour="#51c7b7",
+  geom_text(data=df[epiweek == 56], aes(x=epiweek, y=pos),label="S+",colour="#51c7b7",
             hjust=0,nudge_x=.15) +
   #ggtitle(unique(csv_stp$area))+
   scale_y_continuous(expand=c(0,0)) + #,limits=c(0,800)) +
@@ -142,7 +142,7 @@ a <- ggplot(df[epiweek>=45 & epiweek <= 56,], aes(y=total, x=epiweek)) +
   xlab("") +
   ylab("Number of cases") +
   facet_wrap(~ abbrev_sorted, scales="free",labeller = label_wrap_gen()) + 
-  theme(panel.spacing.x = unit(.2, "lines")) ## This needs to be fixed
+  theme(panel.spacing.x = unit(1.5, "lines")) ## This needs to be fixed
 
 ggsave(here("figures/cases-SGSS-43-56.pdf"),width=16,height=12)
 ggsave(here("figures/cases-SGSS-43-56.png"),width=16,height=12)
