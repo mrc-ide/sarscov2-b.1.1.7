@@ -42,9 +42,6 @@ vignettes/*.pdf
 **/.DS_Store
 # figures and results directory
 src/*.html
-figures/*.png
-figures/*.pdf
-figures/*.svg
 results/*.rds
 age/*.rds
 age/*.png
