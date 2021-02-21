@@ -51,3 +51,4 @@ age/*.png
 age/*.pdf
 age/*.svg
 age/*.csv
+transmission_model/fits
