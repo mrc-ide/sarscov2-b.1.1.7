@@ -49,3 +49,5 @@ age/*.pdf
 age/*.svg
 age/*.csv
 transmission_model/fits
+**/stan_models/*.rds
+results/*
