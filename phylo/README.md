@@ -208,3 +208,10 @@ Plot of TPP-adjusted SGTF against estimated effective population size using `mle
 
 
 
+# Estimating growth rate difference and frequency of VOC from genome count data 
+
+`d4.R` and `d4.stan` contain code to reproduce Bayesian regression analysis described in Methods Section 2. 
+
+`d5.R` contains code to combine phylodynamic Ne(t) estimates (d1-3) and estimated frequencies (d5) to estimate R(t) in VOC and non-VOC. This is described in Methods Section 4.
+
+
