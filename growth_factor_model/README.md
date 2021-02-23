@@ -1,6 +1,6 @@
-# Transmission advantage of B.1.1.7 in terms of growth factors
+# Methods Section 7: Age-stratified SGTF weekly growth model
 
-This file contains code to estimate the transmission advantage of the variant B.1.1.7 in terms of growth factors, using four models and three dataset combinations. The model is scripted in `growthfactor_model.stan` and is called once each with each dataset--model combination, as below, and in `growthfactor_script.R`. Leave-one-out cross-validation is performed with the `loo` package.
+This script contains code to estimate the transmission advantage of the variant B.1.1.7 in terms of growth factors, using four models and three dataset combinations. The model is scripted in `growthfactor_model.stan` and is called once each with each dataset--model combination, as below, and in `growthfactor_script.R`. Leave-one-out cross-validation is performed with the `loo` package.
 
 First, load in required libraries:
 
@@ -19,7 +19,7 @@ outdir <- 'figures/'
 tbit <- c('','Tminus')
 databit <- c('sgss','both','genome')
 
-## for stan 
+# for stan 
 iters <- 4000
 cores <- 2
 chains <- 2
@@ -202,7 +202,7 @@ for(md in 1:length(modnames)){
 
 ## Run models
 
-The models are run with the Stan model defined in `src/growthfactor_model.stan`:
+The models are run with the Stan model defined in `growthfactor_model.stan`:
 
 ```r
 fileName <- 'src/growthfactor_model.stan'
@@ -250,7 +250,7 @@ for(d in 1:3){
 
 ## Plot results
 
-Extract the model's predicted share of ages over time for all regions.
+Extract the model's expected share of ages over time for all regions.
 
 ```r
 mod2run=1:8
