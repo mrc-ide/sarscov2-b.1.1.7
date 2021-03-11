@@ -4,11 +4,12 @@ library(rstan)
 library(data.table)
 library(lubridate)
 library(RColorBrewer)
+library(here)
 
 ## general variables #############################################################
 
 # file name parts
-outdir <- 'figures/'
+outdir <- here('figures/')
 tbit <- c('','Tminus')
 databit <- c('sgss','both','genome')
 
@@ -52,7 +53,7 @@ agebands <- agebands0 <- list(c(0,10),c(11,18),c(19,49),c(50,120))
 #                        .SDcols=c('s_positive_adj1','s_negative_adj1','s_na_adj1')]
 # saveRDS(x16,'data/stp_age_sgtf.Rds')
 # 
-x16 <- readRDS('data/stp_age_sgtf.Rds')
+x16 <- readRDS(here('data/stp_age_sgtf.Rds'))
 
 if(!fourages){
   agebands <- agebands0 <- list(c(11,18),c(19,120))
@@ -71,7 +72,7 @@ regions <- stp2reg$nhser_name
 
 #genome data
 
-genomes <- read.csv("data/B.1.1.7-weightedcounts_nhsregion_date-2021-02-02.csv",stringsAsFactors=F)
+genomes <- read.csv(here("data/B.1.1.7-weightedcounts_nhsregion_date-2021-02-08.csv"),stringsAsFactors=F)
 genomes$epiweek <- epiweek(genomes$date)
 genomes$epiweek[genomes$epiweek<30] <- 53 + genomes$epiweek[genomes$epiweek<30]
 genomes$nhser_name=as.factor(genomes$region)
@@ -155,7 +156,7 @@ init_fun <- function(...) list(b_t=array(-0.0,dim=c(N_t_par,N_reg,N_age_par)),
 # construct models by omitting covariates
 
 stan_data0 <- stan_data
-fileName <- 'src/growthfactor_model.stan'
+fileName <- here('growth_factor_model/growthfactor_model.stan')
 
 modnames <- c('noageortimeorreg','notimeorreg','noage','all')
 
@@ -221,7 +222,7 @@ for(d in 1:3){
     N_t_par <- stan_data$N_t_par; N_age_par <- stan_data$N_age_par; N_reg <- stan_data$N_reg; N_i <- stan_data$N_i; N_age <- stan_data$N_age
     # create file name from variables
     rname <- paste0(tbit[tt+1],modname,databit[d])
-    fn <- paste0(rname,paste(range(wks),collapse=''),'.Rds')
+    fn <- paste0(here("results/"),rname,paste(range(wks),collapse=''),'.Rds')
     # run stan, save
     resStan <- sampling(stan_model, data = stan_data,init=init_fun,
                         chains = chains,cores=cores, iter = iters, thin = thin,
@@ -444,7 +445,7 @@ for(d in 1:3){
 ## loo ################################################################
 # http://mc-stan.org/loo/articles/loo2-with-rstan.html
 if(0){
-  resdir <- './'
+  resdir <- here("results/")
   regex_pars = "b_t|reciprocal_phi|rti|log_growth_Spos_t_sd|b_std|b_t_std|log_T_ratio|s_var|Tg_var"
   for(d in 1:3){
   mod2run <- 1:8
